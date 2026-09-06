@@ -33,41 +33,26 @@ elseif(ALFI_ARCH STREQUAL "rv64gv")
 		)
 	endif()
 else()
-	message(FATAL_ERROR
-		"Unsupported ALFI_ARCH: ${ALFI_ARCH}"
-	)
-endif()
-
-
-if(ALFI_COMPILER STREQUAL "gcc")
-	set(COMPILER "${CMAKE_CXX_COMPILER}")
-elseif(ALFI_COMPILER STREQUAL "clang")
-	set(COMPILER "${CMAKE_CXX_COMPILER}")
-else()
-	message(FATAL_ERROR "Unsupported ALFI_COMPILER: ${ALFI_COMPILER}")
+	message(FATAL_ERROR "Unsupported ALFI_ARCH: ${ALFI_ARCH}")
 endif()
 
 
 if(ALFI_PROFILE STREQUAL "O0")
 	set(OPT_FLAGS
 		-O0
-		-g3
 	)
 elseif(ALFI_PROFILE STREQUAL "O2")
 	set(OPT_FLAGS
 		-O2
-		-g3
 	)
 elseif(ALFI_PROFILE STREQUAL "O3")
 	set(OPT_FLAGS
 		-O3
-		-g3
 	)
 elseif(ALFI_PROFILE STREQUAL "Ofast")
 	set(OPT_FLAGS
 		-Ofast
 		-fno-finite-math-only
-		-g3
 	)
 else()
 	message(FATAL_ERROR "Unsupported ALFI_PROFILE: ${ALFI_PROFILE}")
@@ -95,16 +80,43 @@ set(COMMON_FLAGS
 )
 
 
+set(OPT_REMARK_FLAGS)
+
+if(ALFI_COMPILER STREQUAL "clang")
+	list(APPEND OPT_REMARK_FLAGS
+		-Rpass=loop-vectorize
+		-Rpass-missed=loop-vectorize
+		-Rpass-analysis=loop-vectorize
+		-Rpass=inline
+		-Rpass-missed=inline
+	)
+endif()
+
+
+set(GCC_OPT_FLAGS)
+
+if(ALFI_COMPILER STREQUAL "gcc")
+	list(APPEND GCC_OPT_FLAGS
+		-fopt-info-vec-optimized
+		-fopt-info-vec-missed
+	)
+endif()
+
+
 set(OBJECT_FILE "${CMAKE_BINARY_DIR}/main.o")
 set(ASSEMBLY_FILE "${CMAKE_BINARY_DIR}/main.s")
 set(OBJDUMP_FILE "${CMAKE_BINARY_DIR}/main.objdump.s")
+set(IR_FILE "${CMAKE_BINARY_DIR}/main.ll")
+set(OPT_FILE "${CMAKE_BINARY_DIR}/main.opt.txt")
 
 
 add_custom_command(
 	OUTPUT "${OBJECT_FILE}"
 	COMMAND
-		${COMPILER}
+		${CMAKE_CXX_COMPILER}
 		${COMMON_FLAGS}
+		${OPT_REMARK_FLAGS}
+		${GCC_OPT_FLAGS}
 		-c
 		"${CMAKE_SOURCE_DIR}/main.cpp"
 		-o "${OBJECT_FILE}"
@@ -114,19 +126,54 @@ add_custom_command(
 )
 
 
-add_custom_command(
-	OUTPUT "${ASSEMBLY_FILE}"
-	COMMAND
-		${COMPILER}
-		${COMMON_FLAGS}
-		-fverbose-asm
-		-S
-		"${CMAKE_SOURCE_DIR}/main.cpp"
-		-o "${ASSEMBLY_FILE}"
-	DEPENDS
-		"${CMAKE_SOURCE_DIR}/main.cpp"
-	VERBATIM
-)
+if(ALFI_COMPILER STREQUAL "clang")
+
+	add_custom_command(
+		OUTPUT "${ASSEMBLY_FILE}" "${OPT_FILE}"
+		COMMAND
+			sh -c
+			"\"${CMAKE_CXX_COMPILER}\" ${COMMON_FLAGS} \
+			${OPT_REMARK_FLAGS} \
+			-S \"${CMAKE_SOURCE_DIR}/main.cpp\" \
+			-o \"${ASSEMBLY_FILE}\" \
+			2> \"${OPT_FILE}\""
+		DEPENDS
+			"${CMAKE_SOURCE_DIR}/main.cpp"
+		VERBATIM
+	)
+
+	add_custom_command(
+		OUTPUT "${IR_FILE}"
+		COMMAND
+			${CMAKE_CXX_COMPILER}
+			${COMMON_FLAGS}
+			-S
+			-emit-llvm
+			"${CMAKE_SOURCE_DIR}/main.cpp"
+			-o "${IR_FILE}"
+		DEPENDS
+			"${CMAKE_SOURCE_DIR}/main.cpp"
+		VERBATIM
+	)
+
+else()
+
+	add_custom_command(
+		OUTPUT "${ASSEMBLY_FILE}"
+		COMMAND
+			${CMAKE_CXX_COMPILER}
+			${COMMON_FLAGS}
+			${GCC_OPT_FLAGS}
+			-fverbose-asm
+			-S
+			"${CMAKE_SOURCE_DIR}/main.cpp"
+			-o "${ASSEMBLY_FILE}"
+		DEPENDS
+			"${CMAKE_SOURCE_DIR}/main.cpp"
+		VERBATIM
+	)
+
+endif()
 
 
 add_custom_command(
@@ -140,9 +187,24 @@ add_custom_command(
 )
 
 
-add_custom_target(asm ALL
-	DEPENDS
-		"${OBJECT_FILE}"
-		"${ASSEMBLY_FILE}"
-		"${OBJDUMP_FILE}"
-)
+if(ALFI_COMPILER STREQUAL "clang")
+
+	add_custom_target(asm ALL
+		DEPENDS
+			"${OBJECT_FILE}"
+			"${ASSEMBLY_FILE}"
+			"${OBJDUMP_FILE}"
+			"${IR_FILE}"
+			"${OPT_FILE}"
+	)
+
+else()
+
+	add_custom_target(asm ALL
+		DEPENDS
+			"${OBJECT_FILE}"
+			"${ASSEMBLY_FILE}"
+			"${OBJDUMP_FILE}"
+	)
+
+endif()
