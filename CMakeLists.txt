@@ -80,96 +80,113 @@ set(COMMON_FLAGS
 )
 
 
-set(OPT_REMARK_FLAGS)
+set(OBJECT_FILE
+	"${CMAKE_BINARY_DIR}/main.o"
+)
 
-if(ALFI_COMPILER STREQUAL "clang")
-	list(APPEND OPT_REMARK_FLAGS
+set(ASSEMBLY_FILE
+	"${CMAKE_BINARY_DIR}/main.s"
+)
+
+set(OBJDUMP_FILE
+	"${CMAKE_BINARY_DIR}/main.objdump.s"
+)
+
+set(OPT_FILE
+	"${CMAKE_BINARY_DIR}/main.opt.txt"
+)
+
+
+if(ALFI_COMPILER STREQUAL "gcc")
+
+	set(OPT_FLAGS_EXTRA
+		-fopt-info-vec-all=${OPT_FILE}
+	)
+
+elseif(ALFI_COMPILER STREQUAL "clang")
+
+	set(OPT_RECORD_FILE
+		"${CMAKE_BINARY_DIR}/main.opt.yaml"
+	)
+
+	set(OPT_FLAGS_EXTRA
 		-Rpass=loop-vectorize
 		-Rpass-missed=loop-vectorize
 		-Rpass-analysis=loop-vectorize
 		-Rpass=inline
 		-Rpass-missed=inline
+		-fsave-optimization-record
+		-foptimization-record-file=${OPT_RECORD_FILE}
+	)
+
+else()
+	message(FATAL_ERROR
+		"Unsupported ALFI_COMPILER: ${ALFI_COMPILER}"
 	)
 endif()
 
 
-set(GCC_OPT_FLAGS)
+set(COMPILE_OUTPUTS
+	"${OBJECT_FILE}"
+	"${ASSEMBLY_FILE}"
+)
 
 if(ALFI_COMPILER STREQUAL "gcc")
-	list(APPEND GCC_OPT_FLAGS
-		-fopt-info-vec-optimized
-		-fopt-info-vec-missed
+	list(APPEND COMPILE_OUTPUTS
+		"${OPT_FILE}"
+	)
+else()
+	list(APPEND COMPILE_OUTPUTS
+		"${OPT_RECORD_FILE}"
 	)
 endif()
-
-
-set(OBJECT_FILE "${CMAKE_BINARY_DIR}/main.o")
-set(ASSEMBLY_FILE "${CMAKE_BINARY_DIR}/main.s")
-set(OBJDUMP_FILE "${CMAKE_BINARY_DIR}/main.objdump.s")
-set(IR_FILE "${CMAKE_BINARY_DIR}/main.ll")
-set(OPT_FILE "${CMAKE_BINARY_DIR}/main.opt.txt")
 
 
 add_custom_command(
-	OUTPUT "${OBJECT_FILE}"
+	OUTPUT ${COMPILE_OUTPUTS}
+
 	COMMAND
 		${CMAKE_CXX_COMPILER}
 		${COMMON_FLAGS}
-		${OPT_REMARK_FLAGS}
-		${GCC_OPT_FLAGS}
+		${OPT_FLAGS_EXTRA}
+		-fverbose-asm
+		-save-temps=obj
 		-c
 		"${CMAKE_SOURCE_DIR}/main.cpp"
-		-o "${OBJECT_FILE}"
+		-o
+		"${OBJECT_FILE}"
+
 	DEPENDS
 		"${CMAKE_SOURCE_DIR}/main.cpp"
+
 	VERBATIM
 )
 
 
 if(ALFI_COMPILER STREQUAL "clang")
 
-	add_custom_command(
-		OUTPUT "${ASSEMBLY_FILE}" "${OPT_FILE}"
-		COMMAND
-			sh -c
-			"\"${CMAKE_CXX_COMPILER}\" ${COMMON_FLAGS} \
-			${OPT_REMARK_FLAGS} \
-			-S \"${CMAKE_SOURCE_DIR}/main.cpp\" \
-			-o \"${ASSEMBLY_FILE}\" \
-			2> \"${OPT_FILE}\""
-		DEPENDS
-			"${CMAKE_SOURCE_DIR}/main.cpp"
-		VERBATIM
+	set(BC_FILE
+		"${CMAKE_BINARY_DIR}/main.bc"
 	)
+
+	set(IR_FILE
+		"${CMAKE_BINARY_DIR}/main.ll"
+	)
+
+	find_program(LLVM_DIS llvm-dis REQUIRED)
 
 	add_custom_command(
 		OUTPUT "${IR_FILE}"
-		COMMAND
-			${CMAKE_CXX_COMPILER}
-			${COMMON_FLAGS}
-			-S
-			-emit-llvm
-			"${CMAKE_SOURCE_DIR}/main.cpp"
-			-o "${IR_FILE}"
-		DEPENDS
-			"${CMAKE_SOURCE_DIR}/main.cpp"
-		VERBATIM
-	)
 
-else()
-
-	add_custom_command(
-		OUTPUT "${ASSEMBLY_FILE}"
 		COMMAND
-			${CMAKE_CXX_COMPILER}
-			${COMMON_FLAGS}
-			${GCC_OPT_FLAGS}
-			-fverbose-asm
-			-S
-			"${CMAKE_SOURCE_DIR}/main.cpp"
-			-o "${ASSEMBLY_FILE}"
+			"${LLVM_DIS}"
+			"${BC_FILE}"
+			-o
+			"${IR_FILE}"
+
 		DEPENDS
-			"${CMAKE_SOURCE_DIR}/main.cpp"
+			"${BC_FILE}"
+
 		VERBATIM
 	)
 
@@ -178,11 +195,14 @@ endif()
 
 add_custom_command(
 	OUTPUT "${OBJDUMP_FILE}"
+
 	COMMAND
 		sh -c
 		"\"${CMAKE_OBJDUMP}\" -d -S -C \"${OBJECT_FILE}\" > \"${OBJDUMP_FILE}\""
+
 	DEPENDS
 		"${OBJECT_FILE}"
+
 	VERBATIM
 )
 
@@ -195,7 +215,7 @@ if(ALFI_COMPILER STREQUAL "clang")
 			"${ASSEMBLY_FILE}"
 			"${OBJDUMP_FILE}"
 			"${IR_FILE}"
-			"${OPT_FILE}"
+			"${OPT_RECORD_FILE}"
 	)
 
 else()
@@ -205,6 +225,7 @@ else()
 			"${OBJECT_FILE}"
 			"${ASSEMBLY_FILE}"
 			"${OBJDUMP_FILE}"
+			"${OPT_FILE}"
 	)
 
 endif()
