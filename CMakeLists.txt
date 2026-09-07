@@ -95,54 +95,57 @@ set(COMMON_FLAGS
 )
 
 
-set(OBJECT_FILE "${CMAKE_BINARY_DIR}/main.o")
-set(ASSEMBLY_FILE "${CMAKE_BINARY_DIR}/main.s")
-set(OBJDUMP_FILE "${CMAKE_BINARY_DIR}/main.objdump.s")
+function(add_asm_target target_name source_name)
+	set(OBJECT_FILE "${CMAKE_BINARY_DIR}/${target_name}.o")
+	set(ASSEMBLY_FILE "${CMAKE_BINARY_DIR}/${target_name}.s")
+	set(OBJDUMP_FILE "${CMAKE_BINARY_DIR}/${target_name}.objdump.s")
+
+	add_custom_command(
+		OUTPUT "${OBJECT_FILE}"
+		COMMAND
+			${COMPILER}
+			${COMMON_FLAGS}
+			-c
+			"${CMAKE_SOURCE_DIR}/${source_name}"
+			-o "${OBJECT_FILE}"
+		DEPENDS
+			"${CMAKE_SOURCE_DIR}/${source_name}"
+		VERBATIM
+	)
+
+	add_custom_command(
+		OUTPUT "${ASSEMBLY_FILE}"
+		COMMAND
+			${COMPILER}
+			${COMMON_FLAGS}
+			-fverbose-asm
+			-S
+			"${CMAKE_SOURCE_DIR}/${source_name}"
+			-o "${ASSEMBLY_FILE}"
+		DEPENDS
+			"${CMAKE_SOURCE_DIR}/${source_name}"
+		VERBATIM
+	)
+
+	add_custom_command(
+		OUTPUT "${OBJDUMP_FILE}"
+		COMMAND
+			sh -c
+			"\"${CMAKE_OBJDUMP}\" -d -S -C \"${OBJECT_FILE}\" > \"${OBJDUMP_FILE}\""
+		DEPENDS
+			"${OBJECT_FILE}"
+		VERBATIM
+	)
+
+	add_custom_target(${target_name}
+		DEPENDS
+			"${OBJECT_FILE}"
+			"${ASSEMBLY_FILE}"
+			"${OBJDUMP_FILE}"
+	)
+endfunction()
 
 
-add_custom_command(
-	OUTPUT "${OBJECT_FILE}"
-	COMMAND
-		${COMPILER}
-		${COMMON_FLAGS}
-		-c
-		"${CMAKE_SOURCE_DIR}/main.cpp"
-		-o "${OBJECT_FILE}"
-	DEPENDS
-		"${CMAKE_SOURCE_DIR}/main.cpp"
-	VERBATIM
-)
-
-
-add_custom_command(
-	OUTPUT "${ASSEMBLY_FILE}"
-	COMMAND
-		${COMPILER}
-		${COMMON_FLAGS}
-		-fverbose-asm
-		-S
-		"${CMAKE_SOURCE_DIR}/main.cpp"
-		-o "${ASSEMBLY_FILE}"
-	DEPENDS
-		"${CMAKE_SOURCE_DIR}/main.cpp"
-	VERBATIM
-)
-
-
-add_custom_command(
-	OUTPUT "${OBJDUMP_FILE}"
-	COMMAND
-		sh -c
-		"\"${CMAKE_OBJDUMP}\" -d -S -C \"${OBJECT_FILE}\" > \"${OBJDUMP_FILE}\""
-	DEPENDS
-		"${OBJECT_FILE}"
-	VERBATIM
-)
-
-
-add_custom_target(asm ALL
-	DEPENDS
-		"${OBJECT_FILE}"
-		"${ASSEMBLY_FILE}"
-		"${OBJDUMP_FILE}"
-)
+add_asm_target(alfi alfi.cpp)
+add_asm_target(barycentric barycentric.cpp)
+add_asm_target(hermite hermite.cpp)

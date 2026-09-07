@@ -4,6 +4,9 @@
 // Cubic
 template class alfi::spline::CubicSpline<double>;
 
+// Hermite
+template class alfi::spline::HermiteSpline<double>;
+
 // Linear
 template class alfi::spline::LinearSpline<double>;
 

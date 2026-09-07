@@ -45,13 +45,19 @@ COMPILERS = [
 	'clang',
 ]
 
+TARGETS = [
+	'alfi',
+	'barycentric',
+	'hermite',
+]
+
 
 def run(command):
 	print(' '.join(command), flush=True)
 	subprocess.check_call(command)
 
 
-def build(arch, compiler, profile, openmp):
+def build(arch, compiler, profile, openmp, target):
 	config_name = f'{arch}-{compiler}-{profile}'
 
 	if openmp:
@@ -77,6 +83,7 @@ def build(arch, compiler, profile, openmp):
 		'cmake',
 		'--build',
 		str(build_dir),
+		'--target', target,
 		'-j',
 	])
 
@@ -107,6 +114,12 @@ parser.add_argument(
 	default='both',
 )
 
+parser.add_argument(
+	'--target',
+	choices=[*TARGETS, 'all'],
+	default='all',
+)
+
 args = parser.parse_args()
 
 
@@ -114,10 +127,12 @@ architectures = list(ARCHITECTURES) if args.arch == 'all' else [args.arch]
 compilers = COMPILERS if args.compiler == 'all' else [args.compiler]
 profiles = PROFILES if args.profile == 'all' else [args.profile]
 openmp_options = OPENMP_OPTIONS if args.openmp == 'both' else [args.openmp == 'on']
+targets = TARGETS if args.target == 'all' else [args.target]
 
 
 for arch in architectures:
 	for compiler in compilers:
 		for profile in profiles:
 			for openmp in openmp_options:
-				build(arch, compiler, profile, openmp)
+				for target in targets:
+					build(arch, compiler, profile, openmp, target)
